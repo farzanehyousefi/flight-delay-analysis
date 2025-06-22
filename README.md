@@ -8,7 +8,7 @@ An R-based exploration of U.S. flight delays using Generalized Additive Models (
 
 - **`code/`** – R Markdown source (`flight_delay_analysis.Rmd`)  
 - **`data/`** – raw dataset (`Airline_Delay_Cause.csv`)  
-- **`docs/`** – rendered HTML report (`flight_delay_analysis.html`)  
+- **`docs/`** – rendered HTML report ([View live report](https://farzanehyousefi.github.io/flight-delay-analysis/flight_delay_analysis.html))
 - **`figures/`** – standalone plot images  
 
 ---
