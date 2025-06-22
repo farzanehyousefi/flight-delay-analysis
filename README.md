@@ -20,25 +20,25 @@ An R-based exploration of U.S. flight delays using Generalized Additive Models (
    git clone https://github.com/<your-username>/flight-delay-analysis.git
    cd flight-delay-analysis
 
-2.Install dependencies in R:
+2.**Install** dependencies in R:
 install.packages(c(
   "mgcv", "ggplot2", "dplyr", "tidyr", 
   "reshape2", "patchwork", "ggrepel", 
   "summarytools", "knitr", "rmarkdown"
 ))
 
-3.Render the report:
+3.**Render** the report:
 rmarkdown::render(
   "code/flight_delay_analysis.Rmd",
   output_file = "../docs/flight_delay_analysis.html"
 )
-4.Open the report in your browser:
+4.Open the **report** in your browser:
 docs/flight_delay_analysis.html
 
 
-Dataset
+**Dataset**
 We use the Flight Delay Data for U.S. Airports by Carrier (August 2013 – August 2023), originally published on Kaggle:
 https://www.kaggle.com/datasets/eugeniyosetrov/flights-data?resource=download
 
-Author
+**Author**
 Farzaneh Yousefi
