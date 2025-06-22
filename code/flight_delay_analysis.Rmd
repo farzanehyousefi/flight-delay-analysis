@@ -1,0 +1,1363 @@
+---
+title: "Flight Delay Data for U.S. Airports by Carrier August 2013 - August 2023"
+author: "Farzaneh Yousefi"
+output: html_document
+date: "2024-12-24"
+---
+
+## Dataset Information
+
+The dataset used for this analysis is titled ["Flight Delay Data for U.S. Airports by Carrier August 2013 - August 2023"](https://www.kaggle.com/datasets/sriharshaeedala/airline-delay/data) and is accessible through Kaggle.
+
+
+This dataset provides detailed information on flight arrivals and delays for U.S. airports, categorized by carriers. The data includes metrics such as the number of arriving flights, delays over 15 minutes, cancellation and diversion counts, and the breakdown of delays attributed to carriers, weather, NAS (National Airspace System), security, and late aircraft arrivals. Explore and analyze the performance of different carriers at various airports during this period. Use this dataset to gain insights into the factors contributing to delays in the aviation industry.
+
+Our mission is to uncover the most critical factors contributing to flight delays over 15 minutes across U.S. airports.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load necessary libraries
+```{r}
+library(ggplot2)
+library(dplyr)
+library(ggthemes)
+library(tidyr)
+library(knitr)
+library(summarytools)
+library(reshape2)
+library(patchwork)
+library(ggrepel)
+```
+
+
+Let’s start our journey into the analysis that aims to uncover the most critical factors contributing to flight delays over 15 minutes across U.S. airports.
+
+# Load the dataset
+```{r}
+delay <- read.csv("/Users/farzane/Downloads/NewStatistical-2025/Airline_Delay_Cause 4.csv")
+
+dim(delay) # Number of Rows and Columns of the dataset respectively
+```
+
+
+```{r}
+names(delay) # Displays the Column names of the dataset
+```
+
+```{r}
+head(delay, 10) # Displays the first 10 lines of the dataset
+```
+
+
+# Data Description
+
+The dataset consists of 171666 observations and 21 variables.
+
+- **year**: The year of the data.
+- **month**: The month of the data.
+- **carrier**: Carrier code.
+- **carrier_name**: Carrier name.
+- **airport**: Airport code.
+- **airport_name**: Airport name.
+- **arr_flights**: Number of arriving flights.
+- **arr_del15**: Number of flights delayed by 15 minutes or more.
+- **carrier_ct**: Carrier count (delay due to the carrier).
+- **weather_ct**: Weather count (delay due to weather).
+- **nas_ct**: NAS (National Airspace System) count (delay due to the NAS).
+- **security_ct**: Security count (delay due to security).
+- **late_aircraft_ct**: Late aircraft count (delay due to late aircraft arrival).
+- **arr_cancelled**: Number of flights canceled.
+- **arr_diverted**: Number of flights diverted.
+- **arr_delay**: Total arrival delay.
+- **carrier_delay**: Delay attributed to the carrier.
+- **weather_delay**: Delay attributed to weather.
+- **nas_delay**: Delay attributed to the NAS.
+- **security_delay**: Delay attributed to security.
+- **late_aircraft_delay**: Delay attributed to late aircraft arrival.
+
+
+# Exploratory Data Analysis
+
+```{r}
+summary(delay)
+```
+
+
+# Summarize the flight categories
+
+To better understand the overall performance of flights, we have summarized the key categories of flights in the dataset:
+
+```{r}
+library(dplyr)
+
+flight_summary <- delay %>%
+  summarise(
+    total_flights = sum(arr_flights, na.rm = TRUE),
+    total_canceled = sum(arr_cancelled, na.rm = TRUE),
+    total_diverted = sum(arr_diverted, na.rm = TRUE),
+    total_delayed = sum(arr_del15, na.rm = TRUE),  # Delayed flights (15+ minutes)
+    on_time_flights = total_flights - (total_canceled + total_diverted + total_delayed)  # On-time flights
+  )
+
+print(flight_summary)
+```
+
+This summary gives an overview of the dataset, showing the scale of delays and other disruptions in the U.S. aviation system. Here are the results:
+
+- **Total Flights**: 62,146,805
+- **Canceled Flights**: 1,290,923
+- **Diverted Flights**: 148,007
+- **Delayed Flights**: 11,375,095
+- **On-Time Flights**: 49,332,780
+
+
+# Pie Chart of Flight Categories
+
+```{r}
+# Summarize data to get totals for each category
+flight_summary <- delay %>%
+  summarise(
+    total_flights = sum(arr_flights, na.rm = TRUE),
+    total_canceled = sum(arr_cancelled, na.rm = TRUE),
+    total_diverted = sum(arr_diverted, na.rm = TRUE),
+    total_delayed = sum(arr_del15, na.rm = TRUE)
+  ) %>%
+  mutate(
+    on_time_flights = total_flights - (total_canceled + total_diverted + total_delayed)
+  ) %>%
+  select(total_canceled, total_diverted, total_delayed, on_time_flights) %>%
+  pivot_longer(everything(), names_to = "category", values_to = "count")
+
+# Create a pie chart
+ggplot(flight_summary, aes(x = "", y = count, fill = category)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +  # Polar coordinates for pie chart
+  scale_fill_manual(values = c("total_canceled" = "red",
+                               "total_diverted" = "darkorange",
+                               "total_delayed" = "darkblue",
+                               "on_time_flights" = "darkgreen")) +
+  labs(title = "Breakdown of Flight Categories",
+       fill = "Flight Category") +
+  theme_void() +  # Clean theme for pie charts
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  ) +
+  geom_text(aes(label = paste0(round(count / sum(count) * 100, 1), "%")),
+            position = position_stack(vjust = 0.5), color = "white", size = 4)
+
+```
+
+
+This pie chart shows the breakdown of flight outcomes in the dataset, including on-time flights, delays over 15 minutes, cancellations, and diversions. It highlights how most flights are on time, while a smaller portion face delays, cancellations, and diversions.
+
+
+
+
+# Total number of arriving flights per year
+
+```{r}
+# Aggregate arriving flights by year
+flights_by_year <- delay %>%
+  group_by(year) %>%
+  summarise(total_arriving_flights = sum(arr_flights, na.rm = TRUE))
+
+# Bar chart: Total number of arriving flights per year
+ggplot(flights_by_year, aes(x = factor(year), y = total_arriving_flights)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +  # Added black border for clarity
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis with commas
+  labs(title = "Total Number of Arriving Flights Per Year",
+       x = "Year",
+       y = "Number of Flights") +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.y = element_text(size = 12),
+    axis.text.x = element_text(size = 12, angle = 45, hjust = 1)
+  )
+
+```
+
+
+This bar chart shows the total number of arriving flights in the U.S. for each year from 2013 to 2023. It provides a clear view of trends in air traffic over the years.
+
+# Exploring Monthly Trends in Total Flights
+
+```{r}
+monthly_summary <- delay %>%
+  group_by(year, month) %>%
+  summarise(total_flights = sum(arr_flights, na.rm = TRUE)) %>%
+  mutate(date = as.Date(paste(year, month, "01", sep = "-")))  # Create Date column
+
+# Line chart: Total flights over time (monthly)
+ggplot(monthly_summary, aes(x = date, y = total_flights)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(size = 2, color = "blue") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Monthly Total Flights Over Time (Highlighting 2020 Decline)",
+       x = "Date",
+       y = "Total Flights") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 10)
+  )
+
+```
+
+
+This line chart illustrates the monthly trend in total arriving flights in the U.S., spanning from 2013 to 2023.**A striking feature is the dramatic decline in flights during 2020, a direct result of the COVID-19 pandemic's impact on global air travel**. The chart provides a clear perspective on the recovery of air traffic in the subsequent years.
+
+
+# Annual Trends in Flight Cancellations
+
+```{r}
+yearly_cancellations <- delay %>%
+  group_by(year) %>%
+  summarise(total_cancellations = sum(arr_cancelled, na.rm = TRUE))
+
+ggplot(yearly_cancellations, aes(x = factor(year), y = total_cancellations)) +
+  geom_bar(stat = "identity", fill = "red", color = "black") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Total Cancellations Per Year",
+       x = "Year", y = "Number of Cancellations") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 10)
+  )
+
+```
+
+This bar chart highlights the total number of flight cancellations per year, showcasing significant fluctuations over time. **The significant rise in cancellations in 2020 reflects the impact of the COVID-19 pandemic, which disrupted air travel globally**. This chart provides a clear visualization of how the aviation industry was impacted during this challenging period and its gradual recovery in the following years.
+
+
+# Total Delays Per Year
+
+```{r}
+yearly_delays <- delay %>%
+  group_by(year) %>%
+  summarise(total_delays = sum(arr_delay, na.rm = TRUE))  # Sum of total arrival delays
+
+# Bar plot: Total delays per year
+ggplot(yearly_delays, aes(x = factor(year), y = total_delays)) +
+  geom_bar(stat = "identity", fill = "orange", color = "black") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Total Delays Per Year",
+       x = "Year", y = "Total Delay (in minutes)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 10)
+  )
+
+```
+
+This chart illustrates the total minutes of delays per year across U.S. flights. **A noticeable drop in total delays is evident in 2020, reflecting the reduced number of flights during the pandemic**. With fewer flights in operation that year, overall delays naturally decreased. As flight numbers rebounded in subsequent years, delays also increased, highlighting the correlation between flight volume and total delay time.
+
+
+
+# Monthly Distribution of Arriving Flights
+
+```{r}
+# Aggregate arriving flights by month
+flights_by_month <- delay %>%
+  group_by(month) %>%
+  summarise(total_arriving_flights = sum(arr_flights, na.rm = TRUE))
+
+# Define month names
+month_names <- c("January", "February", "March", "April", "May", "June",
+                 "July", "August", "September", "October", "November", "December")
+
+flights_by_month$month <- factor(month_names, levels = month_names)
+
+# Bar chart: Number of flights per month
+ggplot(flights_by_month, aes(x = month, y = total_arriving_flights)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Number of Flights by Month",
+       x = "Month",
+       y = "Number of Flights") +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10)
+  )
+
+```
+
+This bar chart provides an overview of the total number of arriving flights for each month. It highlights the seasonality in flight traffic, with peaks observed during summer months like July and August, likely driven by vacation travel. Conversely, slightly lower activity may be seen in months such as February or October, reflecting off-peak travel periods. This seasonal variation offers insights into travel demand patterns across the year.
+
+# Season
+
+```{r}
+delay <- delay %>%
+  mutate(
+    season = case_when(
+      month %in% c(12, 1, 2) ~ "Winter",
+      month %in% c(3, 4, 5) ~ "Spring",
+      month %in% c(6, 7, 8) ~ "Summer",
+      month %in% c(9, 10, 11) ~ "Autumn"
+    )
+  )
+
+```
+
+"We've categorized the data into four distinct seasons **Winter, Spring, Summer, and Autumn**based on the months. This seasonal grouping helps to analyze and visualize trends more effectively, capturing potential seasonal impacts on flight operations. 
+
+Below, the total number of flights for each season is visualized, providing insights into how flight traffic varies throughout the year."
+
+
+```{r}
+flights_by_season <- delay %>%
+  group_by(season) %>%
+  summarise(total_flights = sum(arr_flights, na.rm = TRUE))
+
+#Visualize Flights by Season
+ggplot(flights_by_season, aes(x = season, y = total_flights, fill = season)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Flights Per Season", x = "Season", y = "Number of Flights") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Pastel1")
+
+```
+
+The bar chart displays the total number of flights for each season, making it easy to compare the volume of flights across different seasons. 
+
+
+# Number of Flights by Each Airline
+
+```{r}
+# Aggregate arriving flights by airline
+flights_by_airline <- delay %>%
+  group_by(carrier_name) %>%
+  summarise(total_arriving_flights = sum(arr_flights, na.rm = TRUE)) %>%
+  arrange(desc(total_arriving_flights))
+
+# Bar chart: Number of flights by each airline
+ggplot(flights_by_airline, aes(x = reorder(carrier_name, -total_arriving_flights), y = total_arriving_flights)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis with commas
+  labs(title = "Number of Flights by Each Airline",
+       x = "Airline",
+       y = "Number of Flights") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.y = element_text(size = 10))
+
+```
+
+
+This chart showcases the number of flights handled by each airline over the observed period. **Southwest Airlines leads as the airline with the highest number of flights**, reflecting its large-scale operations and extensive network.
+
+
+# Subsetting Out Year 2020:
+
+To remove 2020 data and ensure no anomalies interfere with the analysis:
+
+```{r}
+# Subset data excluding the year 2020
+delay_no2020 <- delay %>% 
+  filter(year != 2020)
+
+```
+
+## Why Remove 2020 Data?
+
+The year 2020 brought unprecedented disruptions to the aviation industry due to the COVID-19 pandemic. With strict travel restrictions, reduced demand, and widespread cancellations, flight operations during this period deviated significantly from typical patterns observed in other years. These anomalies could skew the analysis and affect the accuracy of insights derived from the data.
+
+To ensure a more representative and consistent analysis, we have decided to exclude the data from 2020 in subsequent visualizations and calculations.
+
+
+# Updated Metrics Excluding 2020
+
+```{r}
+summary_filtered <- delay_no2020 %>%
+  summarise(
+    total_flights = sum(arr_flights, na.rm = TRUE),
+    total_canceled = sum(arr_cancelled, na.rm = TRUE),
+    total_diverted = sum(arr_diverted, na.rm = TRUE),
+    total_delayed = sum(arr_del15, na.rm = TRUE),
+    on_time_flights = total_flights - (total_canceled + total_diverted + total_delayed)
+  )
+
+print(summary_filtered)
+
+```
+After excluding the anomalous year 2020 from the dataset, the key metrics were recalculated to provide a more consistent view of flight operations:
+
+- **Total Flights**: 57,458,451
+- **Canceled Flights**: 1,009,889
+- **Diverted Flights**: 140,263
+- **Delayed Flights (15+ minutes)**: 10,943,174
+- **On-Time Flights**: 45,365,125
+
+# Comparison of Flight Metrics Before and After Excluding 2020
+
+```{r}
+library(knitr)
+
+summary_combined <- data.frame(
+  Metric = c("Total Flights", "Total Canceled", "Total Diverted", 
+             "Total Delayed (15+ min)", "On-Time Flights"),
+  With_2020 = c(62146805, 1290923, 148007, 11375095, 49332780),
+  Without_2020 = c(57458451, 1009889, 140263, 10943174, 45365125)
+)
+
+kable(summary_combined, 
+      caption = "Comparison of Flight Metrics Before and After Excluding 2020", 
+      format = "simple")
+
+```
+
+
+
+# Total Delays by Month (after excluding pandamic)
+
+```{r}
+# Group by month and calculate total delays
+monthly_delays <- delay_no2020 %>%
+  group_by(month) %>%
+  summarise(total_delays = sum(arr_del15, na.rm = TRUE))
+
+# Bar chart to visualize total delays by month
+ggplot(monthly_delays, aes(x = factor(month), y = total_delays)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(
+    title = "Total Delays Over 15 Minutes by Month",
+    x = "Month",
+    y = "Total Delays (15+ minutes)"
+  ) +
+  theme_minimal()
+
+```
+
+The pattern is logical: months with higher flight volumes often experience more delays. This is expected, as increased air traffic places more strain on resources, leading to a higher likelihood of delays. For example, summer months or holiday seasons, which tend to see more flights, also report higher delays, aligning with the earlier observation about the busiest seasons.
+
+
+# Preprocessing
+
+```{r}
+missing_values <- colSums(is.na(delay_no2020))
+
+print(missing_values)
+```
+
+Before analyzing the data, we checked for missing values to ensure data quality. Some columns, such as arr_flights, arr_del15, carrier_ct, and others, have 150 missing values. Delays-related columns like arr_delay and carrier_delay also have 150 missing values.
+
+# Preprocessing: Missing Values Percentage
+
+```{r}
+
+missing_percentage <- (colSums(is.na(delay_no2020)) / nrow(delay_no2020)) * 100
+
+# Display the missing percentage for each column
+print(missing_percentage)
+
+# Sort and display columns with missing values in descending order
+missing_percentage_sorted <- sort(missing_percentage[missing_percentage > 0], decreasing = TRUE)
+print(missing_percentage_sorted)
+```
+
+We calculated the percentage of missing values for each column compared to the total data. Columns like arr_del15 have the highest missing percentage at 0.12%, while others, such as arr_flights and carrier_ct, have around 0.10% missing values. Most columns have minimal missing data, which will be addressed during preprocessing.
+
+```{r}
+sum(is.na(delay_no2020)) # Total number of missing values in the dataset
+```
+
+
+# Impute
+
+For handling missing values, we replaced the missing entries in numeric columns with their respective median values. This ensures that the dataset remains complete while minimizing the impact on the data's overall distribution.
+
+```{r}
+# Identify numeric columns and get their names
+numeric_columns <- names(delay_no2020)[sapply(delay_no2020, is.numeric)]
+
+# Replace NA values in numeric columns with the median
+delay_no2020[numeric_columns] <- lapply(delay_no2020[numeric_columns], function(x) {
+  replace(x, is.na(x), median(x, na.rm = TRUE))
+})
+
+```
+
+
+
+```{r}
+colSums(is.na(delay_no2020))
+sum(is.na(delay_no2020))
+```
+
+
+# Compute Log Ratio of Delays
+
+To normalize the delays for varying flight volumes, we calculate the ratio of **flights delayed by 15+ minutes** to the **total number of arriving flights**. Since this ratio can vary widely, we apply the **natural logarithm** to stabilize the variance.
+
+Before calculating the ratio:
+
+1. We ensure there are **no zero values** in `arr_flights` and `arr_del15` to avoid division errors.  
+2. We compute:  
+
+\[
+\text{delay_ratio} = \log\left(\frac{\text{arr_del15}}{\text{arr_flights}}\right)
+\]
+
+
+
+```{r}
+delay_no2020_ratio <- delay_no2020 %>%
+  filter(arr_flights > 0, arr_del15 > 0) %>%
+  mutate(delay_ratio = log(arr_del15 / arr_flights))
+
+```
+
+
+
+# Verify the Results:
+
+After computing the ratio, inspect the first few rows and the summary statistics to ensure correctness:
+
+```{r}
+
+# View the first few rows
+head(delay_no2020_ratio)
+
+# Check the summary statistics of delay_ratio
+summary(delay_no2020_ratio)
+```
+
+## Summary of Delay Ratio
+
+The summary of the delay_ratio shows:
+
+- The lowest value is -4.771, meaning very few delays compared to total flights in some cases.
+
+- The average delay ratio is around -1.748, showing delays are generally low relative to flights.
+
+- Half of the data falls below -1.689 (median), and most values are below -1.382 (3rd quartile).
+
+- The highest delay ratio is 2.944, where delays are much higher compared to total flights.
+
+- This suggests that delays are usually low, but there are some cases with significantly higher delays.
+
+
+# Filtering for Extreme Cases
+
+To identify and investigate extreme cases where the delay_ratio exceeds 1 (indicating that the number of delays exceeds total arriving flights):
+
+
+
+```{r}
+delay_no2020_ratio %>%
+    filter(delay_ratio > 1)  # Example: Identify extreme cases
+
+```
+
+
+# Handling Extreme Cases
+
+We identified rows where delay_ratio > 1, which is logically inconsistent as the number of flights delayed by 15+ minutes cannot exceed the total number of arriving flights. To address this, we filtered out these rows to ensure data consistency and reliability in the analysis.
+
+
+```{r}
+# Filter out rows with delay_ratio > 1
+delay_no2020_ratio <- delay_no2020_ratio %>%
+    filter(delay_ratio <= 1)
+
+```
+
+This step removes anomalies and ensures the dataset reflects realistic flight delay scenarios.
+
+```{r}
+summary(delay_no2020_ratio$delay_ratio)
+```
+
+
+```{r}
+ggplot(delay_no2020_ratio, aes(x = arr_flights, y = arr_del15)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  facet_wrap(~season) +
+  labs(
+    title = "Seasonal Variation in Delays Over 15 Minutes",
+    x = "Number of Flights (arr_flights)",
+    y = "Delays > 15 Minutes (arr_del15)"
+  ) +
+  theme_minimal()
+
+```
+
+
+The plot shows the connection between the number of flights and delays over 15 minutes, separated by season (Autumn, Spring, Summer, Winter). Here's what it tells us:
+
+**1- More Flights = More Delays**:
+
+- In every season, when the number of flights increases, the number of delays also goes up. This is expected.
+
+**2- Seasons Look Similar**:
+
+- The trend between flights and delays is very similar across all seasons, with no major differences.
+
+**3- Outliers**:
+
+- Some points show unusually high delays for very few flights or very high flights with fewer delays.
+
+
+# Normalizing Delay Predictors by Flight Volume
+
+To better understand the contribution of different factors to delays, we normalize each delay type by the total number of flights. This ensures that the comparison is fair across different flight volumes. Additionally, the delay ratio (log-transformed) is used as the target variable for further analysis.
+
+```{r}
+
+delay_normalized <- delay_no2020_ratio %>%
+  filter(arr_flights > 0, carrier_ct > 0, weather_ct > 0, nas_ct > 0, 
+         security_ct > 0, late_aircraft_ct > 0) %>%  # Ensure no zeros in denominators
+  mutate(
+    delay_ratio = log(arr_del15 / arr_flights),   # Target variable (already log-transformed)
+    carrier_ratio = carrier_ct / arr_flights,     # Normalize carrier delays
+    weather_ratio = weather_ct / arr_flights,     # Normalize weather delays
+    nas_ratio = nas_ct / arr_flights,             # Normalize NAS delays
+    security_ratio = security_ct / arr_flights,   # Normalize security delays
+    late_aircraft_ratio = late_aircraft_ct / arr_flights  # Normalize late aircraft delays
+  )
+```
+
+
+
+
+
+# Check Skewness 
+
+To visually identify skewness for the new predictors (carrier_ratio, weather_ratio, etc.):
+
+```{r}
+library(ggplot2)
+
+# Convert data to long format for plotting
+normalized_long <- delay_normalized %>%
+  select(delay_ratio, carrier_ratio, weather_ratio, nas_ratio, security_ratio, late_aircraft_ratio) %>%
+  pivot_longer(everything(), names_to = "RatioType", values_to = "Value")
+
+# Plot histograms
+ggplot(normalized_long, aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white", alpha = 0.7) +
+  facet_wrap(~RatioType, scales = "free") +
+  labs(
+    title = "Distribution of Normalized Delay Ratios",
+    x = "Value",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+This visualization displays the distributions of normalized delay ratios for various delay factors, including carrier, weather, NAS, security, and late aircraft delays. Each histogram represents the contribution of a specific factor to delays relative to the total number of flights.
+
+## Key Observations:
+
+**Skewness**:
+
+- The distributions of all delay ratios exhibit positive skewness (right-skewed), as most values are clustered near zero, with a few higher values extending to the right. This indicates that for most flights, delays caused by these factors are relatively small, but occasional outliers result in significant delays. Notable Factors:
+
+- Carrier, late aircraft, and NAS delays show a wider spread, indicating greater variability in their contribution to delays. Security and weather delays have much smaller normalized ratios and tighter distributions, suggesting they contribute minimally and consistently to delays. Implications:
+
+- The skewed distributions highlight that while delays are generally low, some extreme cases significantly impact overall performance. This analysis helps pinpoint which delay types have more variability and need targeted intervention to minimize their effects.
+
+# Log Transformation of Delay Ratios
+
+
+Applying log transformation to the normalized delay ratios reduces skewness and stabilizes variance, making the data more suitable for further analysis.
+
+
+
+```{r}
+delay_normalized_log <- delay_normalized %>%
+  mutate(
+    log_carrier_ratio = log(carrier_ratio),  
+    log_weather_ratio = log(weather_ratio),
+    log_nas_ratio = log(nas_ratio),
+    log_security_ratio = log(security_ratio),
+    log_late_aircraft_ratio = log(late_aircraft_ratio)
+  )
+summary(delay_normalized_log)
+```
+
+
+
+# Converting Season from Character to Facto
+
+```{r}
+delay_normalized_log$season<-as.factor(delay_normalized_log$season) # Convert season column to factor
+summary(delay_normalized_log$season)
+```
+
+
+```{r}
+library(writexl)
+
+# Export to Excel
+write_xlsx(delay_normalized_log, "delay_normalized_log.xlsx")
+
+```
+
+
+
+# Comprehensive Summary of Normalized and Log-Transformed Data
+
+The output provides a detailed summary of the normalized and log-transformed data, including descriptive statistics, missing values, and distribution characteristics for each variable.
+
+```{r}
+library(summarytools)
+print(dfSummary(delay_normalized_log), method = 'render')
+```
+
+
+
+# Proportional Breakdown of Delay Causes
+
+This pie chart visualizes the normalized contributions of different delay reasons to overall flight delays, represented as percentages for clear comparison.
+
+**Which delay type contributes the most overall?**
+
+```{r}
+# Summarize normalized delay ratios (not log-transformed)
+delay_ratios <- delay_normalized %>%
+  summarise(
+    carrier_delay = sum(carrier_ratio),
+    weather_delay = sum(weather_ratio),
+    nas_delay = sum(nas_ratio),
+    security_delay = sum(security_ratio),
+    late_aircraft_delay = sum(late_aircraft_ratio)
+  ) %>%
+  pivot_longer(everything(), names_to = "DelayReason", values_to = "RatioSum") %>%
+  mutate(Percentage = round(RatioSum / sum(RatioSum) * 100, 1))  # Calculate percentages
+
+# Plot pie chart with percentages
+ggplot(delay_ratios, aes(x = "", y = RatioSum, fill = DelayReason)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +  # Ensure segments are distinguishable
+  coord_polar("y", start = 0) +  # Convert to pie chart
+  geom_text(aes(label = paste0(Percentage, "%")), 
+            position = position_stack(vjust = 0.5), size = 4, color = "black") +  # Add percentages
+  scale_fill_brewer(palette = "Set3") +  # Use a nice color palette
+  labs(title = "Proportional Breakdown of Delay Reasons",
+       fill = "Delay Reason") +
+  theme_void()  # Minimalist theme for pie chart
+
+```
+
+# Correlation analysis code for your delay_ratio and normalized predictors:
+
+**Which delay type is most correlated with the total delay ratio?**
+
+```{r}
+# Compute correlation matrix using log-transformed ratios
+correlation_matrix <- delay_normalized_log %>%
+  select(delay_ratio, 
+         log_carrier_ratio, log_weather_ratio, log_nas_ratio, 
+         log_security_ratio, log_late_aircraft_ratio) %>%
+  cor(use = "complete.obs")
+
+# Visualize correlation matrix using heatmap
+library(ggcorrplot)
+
+ggcorrplot(correlation_matrix, 
+           lab = TRUE,                 # Add correlation values as text
+           type = "lower",             # Show lower triangle of the matrix
+           title = "Correlation Matrix: Delay Ratio vs Log-Transformed Predictors",
+           lab_size = 4,               # Text size
+           colors = c("blue", "white", "red"), # Diverging colors
+           ggtheme = theme_minimal())
+```
+
+- The correlation matrix shows relationships between delay causes (e.g., carrier delay, late aircraft delay) and the delay ratio.
+Key observation:
+
+- The delay ratio has the strongest correlation with log_carrier_ratio (0.69) and log_late_aircraft_ratio (0.69).
+
+- Other delay factors like weather and NAS show weaker correlations with the delay ratio.
+
+# Starting the Model: Multiple Linear Regression
+
+
+
+```{r}
+mod1<- lm(delay_ratio ~ log_late_aircraft_ratio, 
+                 data = delay_normalized_log)
+
+summary(mod1)
+```
+
+This linear regression analysis shows that there is a significant relationship between the delay_ratio and log_late_aircraft_ratio. The intercept is -0.3733, which represents the delay_ratio when log_late_aircraft_ratio is zero. The coefficient for log_late_aircraft_ratio is 0.4415, meaning that for each one-unit increase in the log of late aircraft ratio, the delay ratio increases by 0.4415. Both the intercept and the coefficient are highly significant, with p-values less than 2e-16. The model explains about 47.66% of the variation in delay ratio, and the overall model is statistically significant, as indicated by the high F-statistic and small residual standard error.
+
+
+
+# Adding Carrier Delays
+
+```{r}
+mod2<-update(mod1,.~.+log_carrier_ratio)
+
+summary(mod2)
+```
+
+By adding the second predictor, log_carrier_ratio, the model’s ability to explain the delay_ratio improves. Both predictors, log_late_aircraft_ratio and log_carrier_ratio, are statistically significant, meaning each one has a meaningful impact on the delay ratio. The model now explains about 67.72% of the variation in the delay ratio, which is a significant improvement over the previous model. The residual standard error also decreases, indicating a better fit. The overall model is highly significant, confirming that including both predictors provides a more accurate prediction of delays.
+
+
+
+# Adding NAS Delays
+
+```{r}
+mod3 <- update(mod2, . ~ . + log_nas_ratio)
+
+summary(mod3)
+
+
+```
+
+
+By adding log_nas_ratio to the model, it explains delay_ratio much better. All three predictors — log_late_aircraft_ratio, log_carrier_ratio, and log_nas_ratio — are significant, meaning they all have a real impact on delays. The model now explains 87.08% of the variation in the delay ratio, which is a big improvement. The residual standard error is smaller, showing a better fit. The high F-statistic confirms that the model is strong and the addition of log_nas_ratio helps in predicting delays more accurately.
+
+# Adding Weather Delays
+
+```{r}
+mod4 <- update(mod3, . ~ . + log_weather_ratio)
+
+summary(mod4)
+
+```
+
+By adding log_weather_ratio to the model, it helps predict delay_ratio even better. All four predictors — log_late_aircraft_ratio, log_carrier_ratio, log_nas_ratio, and log_weather_ratio — are important and have a strong impact on the delay ratio. The model now explains 88.87% of the variation in delays, which is a big improvement. The residual standard error is smaller, showing a better fit. The high F-statistic confirms that the model is strong, and adding log_weather_ratio shows that weather also affects flight delays.
+
+# Adding Security Delays
+
+```{r}
+mod5 <- update(mod4, . ~ . + log_security_ratio)
+summary(mod5)
+
+```
+
+By adding log_security_ratio to the model, the prediction of delay_ratio improves further. All five predictors — log_late_aircraft_ratio, log_carrier_ratio, log_nas_ratio, log_weather_ratio, and log_security_ratio — are statistically significant, with very small p-values (less than 2e-16). The model now explains 89.15% of the variation in the delay ratio, a slight improvement over the previous models. The residual standard error has decreased to 0.1311, indicating a better fit. The high F-statistic (27,180) confirms the model’s significance, and adding log_security_ratio shows that security factors also contribute to flight delays.
+
+
+# Season
+
+In analyzing flight delays, it is important not to overlook the potential impact of season on the delay_ratio. Previous observations have shown that the summer season experiences the highest number of delays. Therefore, adding the season variable to the model allows us to better account for seasonal effects that may influence delays, providing a more comprehensive understanding of the factors at play.
+
+```{r}
+
+mod6 <- update(mod5, . ~ . +season)
+summary(mod6)
+
+```
+
+The model with the inclusion of season shows that all predictors, including log_late_aircraft_ratio, log_carrier_ratio, log_nas_ratio, log_weather_ratio, and log_security_ratio, remain statistically significant. Additionally, the seasonal factors — seasonSpring, seasonSummer, and seasonWinter — also have a significant effect on the delay ratio, with summer and winter showing the highest increases. The model explains 89.23% of the variation in delays, and the residual standard error is reduced to 0.1306, indicating a better fit. The F-statistic confirms the model’s strong significance, suggesting that the inclusion of seasonal factors provides a more accurate prediction of delays.
+
+
+
+# Interaction Between Weather and Season
+
+```{r}
+mod7 <- update(mod5, . ~ . +log_weather_ratio*season)
+summary(mod7)
+```
+
+
+In this model, we are checking if season affects delay_ratio independently or if it interacts with weather. The results show that season itself doesn’t have a strong impact, except for Winter, which has a small but significant effect. The interaction terms between weather and the seasons (Spring, Summer, Winter) also don’t show significant effects. This means that season and weather affect delays mostly independently, with Winter having a noticeable impact on delays.
+
+Given this, it would be better to ignore the interaction terms and just consider season as a standalone variable in your model. The seasonWinter variable does have a significant effect on delay_ratio, but the interaction terms do not add meaningful information to the model. Therefore, we can keep the simpler model with season alone, which explains the delays effectively without introducing unnecessary complexity.
+
+
+```{r}
+library(car)
+residualPlots(mod6)
+```
+
+
+```{r}
+qqPlot(residuals(mod6))
+```
+
+The QQ plot (Quantile-Quantile plot) displays the comparison between the quantiles of the residuals and a normal distribution. If the residuals were normally distributed, the points would lie along a straight diagonal line. However, if the points deviate significantly from this line, it suggests that the residuals do not follow a normal distribution, which could indicate issues such as skewness or heavy tails in the residuals. Given the curvature in the residuals plot and the appearance in the QQ plot, the assumption of normality for the residuals may not hold, and this is another reason why a GAM could provide a better fit for the data.
+
+
+
+**Residuals**
+
+The residuals plot shows a clear curvature pattern, indicating that the relationship between the predictors and the response variable might not be entirely linear. This suggests that the current linear model may not fully capture the underlying structure of the data. To address this, we can consider fitting a **Generalized Additive Model (GAM)**, which allows for more flexible relationships between the predictors and the response by using smooth functions. This approach can help model the non-linear trends observed in the residuals plot.
+
+
+**Generalized Additive Model (GAM)**
+
+A Generalized Additive Model (GAM) extends traditional linear models by allowing non-linear relationships between the predictors and the outcome. The general formula for a GAM is:
+
+                            y = β₀ + f₁(x₁) + f₂(x₂) + ... + fₚ(xₚ) + ε
+
+**Where**:
+
+- y is the dependent variable (for example, delay ratio),
+- x₁, x₂, ..., xₚ are the predictors (such as log_late_aircraft_ratio, log_carrier_ratio, etc.),
+- f₁, f₂, ..., fₚ are smooth functions applied to each predictor, allowing them to have a non-linear impact on y,
+- β₀ is the intercept, and
+- ε is the error term.
+
+In R, we can use the mgcv package to fit a GAM, where the smooth functions fₖ are typically estimated using splines. This flexibility allows the model to capture complex, non-linear relationships between the predictors and the response variable.
+
+
+# GAM
+
+```{r}
+library(mgcv)
+library(nlme)
+
+
+
+mod_gam <- gam(delay_ratio ~ s(log_late_aircraft_ratio) + s(log_carrier_ratio) + 
+                 s(log_nas_ratio) +  s(log_weather_ratio) + s(log_security_ratio) 
+                   + season, data = delay_normalized_log)
+
+
+# Summary of the GAM model
+summary(mod_gam)
+
+```
+
+The results from the Generalized Additive Model (GAM) suggest a strong fit for predicting delay_ratio with significant non-linear relationships between the predictors and the outcome. Here's a detailed summary of the model's findings:
+
+**1- Parametric Coefficients**:
+
+- The intercept is highly significant with a very small p-value (<2e-16), indicating that the baseline level of the delay ratio is significantly different from zero.
+
+- Season variables (Spring, Summer, and Winter) are also significant, with Winter showing the strongest effect, having the highest t-value (5.872) and p-value (< 2e-16). This suggests that delays are notably higher in winter compared to other seasons. Spring and Summer are also significant, but with smaller effects.
+
+
+**2- Smooth Terms**:
+
+- The smooth terms for each predictor (log_late_aircraft_ratio, log_carrier_ratio, log_nas_ratio, log_weather_ratio, and log_security_ratio) all have edf (estimated degrees of freedom) close to their ref.df (reference degrees of freedom), indicating that the smooth terms are effectively modeling the non-linear relationships between these predictors and the outcome.
+
+- The F-statistics for all smooth terms are extremely high, and the p-values are all less than 2e-16, suggesting that these smooth functions are statistically significant. This confirms that each predictor has a strong, non-linear influence on the delay ratio.
+
+
+**3- Model Fit**:
+
+- The Adjusted R-squared value is 0.97, which indicates that the model explains 97% of the variance in the delay ratio. This is an excellent fit, showing that the model accounts for almost all the variability in the outcome.
+
+- The Deviance explained is also 97%, which further supports the idea that the model fits the data very well.
+The Generalized Cross Validation (GCV) score of 0.0048334 is very low, indicating that the model generalizes well and avoids overfitting.
+
+
+**In summary, this GAM provides a strong, well-fitting model with both linear and non-linear relationships, and it effectively captures the seasonal effects on delays. The model's performance metrics, including R-squared and Deviance explained, demonstrate that it explains the variation in the delay ratio very effectively.**
+
+
+
+
+```{r}
+plot(mod_gam,shade = TRUE, shade.col = "lightblue")
+```
+
+
+**1- Plot for log_late_aircraft_ratio**:
+
+This smooth function shows a positive relationship between log_late_aircraft_ratio and the delay_ratio. As the log of the late aircraft ratio increases, the delay ratio also increases, particularly after the value reaches around -5. The plot shows a gradual increase with a smooth curve, suggesting that the effect of log_late_aircraft_ratio is non-linear.
+
+
+**2- Plot for log_carrier_ratio**:
+
+This smooth function indicates a positive, non-linear relationship between log_carrier_ratio and delay_ratio. Similar to log_late_aircraft_ratio, the delay ratio increases as the log_carrier_ratio rises. The curve becomes steeper at higher values, showing a stronger effect as the carrier ratio increases.
+
+
+**3- Plot for log_nas_ratio**:
+
+This plot shows a positive relationship between log_nas_ratio and delay_ratio. As log_nas_ratio increases, the delay ratio increases as well. The curve is quite steep for lower values of log_nas_ratio and then flattens out slightly at higher values.
+
+
+**4- Plot for log_weather_ratio**:
+
+The smooth function for log_weather_ratio shows that weather ratio has a slight positive effect on delay_ratio. However, the relationship is almost flat, indicating that changes in weather ratio do not have a strong influence on delay ratio.
+
+
+**5- Plot for log_security_ratio**:
+
+The log_security_ratio also shows a very small positive effect on delay_ratio. The curve is almost flat, meaning that security ratio has a minimal non-linear effect on the delay ratio, with only small increases in the delay ratio as the security ratio rises.
+
+
+Each plot represents the non-linear relationship between the respective predictor and the delay ratio, where the shaded areas indicate confidence intervals around the smooth terms. The smooth curves highlight how each predictor affects the response variable without assuming a linear relationship.
+
+
+
+```{r}
+qqPlot(residuals(mod_gam))
+```
+
+This is a QQ plot for the residuals of the GAM model. The black line represents the observed quantiles of the residuals, and the blue line represents the expected quantiles under a normal distribution.
+
+The plot suggests that the residuals are not perfectly normal, as indicated by the departure from the blue line at the extremes. This means that the residuals have some deviations from normality, which may suggest issues indicating that there might be outliers or extreme values in the data..
+
+However, the residuals do follow the expected pattern in the middle range, indicating that most of the residuals are approximately normally distributed.
+
+
+
+The QQ plot of the residuals suggests that the residuals deviate from the normal distribution at both extremes, indicating the potential presence of outliers or extreme values. While the residuals appear normally distributed in the middle range, the tails show departures that could be influenced by these outliers.
+
+
+To investigate further and identify the outliers in the data, I examined the residuals using different thresholds. These thresholds represent different quantiles of the absolute residuals, and any data point with an absolute residual greater than the threshold is considered an outlier.
+
+
+
+# Here is the R code I used to detect outliers based on different thresholds:
+
+```{r}
+# Extract residuals from the GAM model
+residuals <- residuals(mod_gam)
+
+# Try different thresholds for outliers
+thresholds <- c(0.85,0.88,0.90, 0.92, 0.95, 0.98, 0.99, 0.995)  # Different quantiles
+
+# Identify outliers based on absolute residuals
+outlier_sets <- lapply(thresholds, function(t) {
+  which(abs(residuals) > quantile(abs(residuals), t))
+})
+
+# Compare the number of outliers identified at each threshold
+sapply(outlier_sets, length)
+
+```
+
+
+The results showed the following number of outliers at each threshold:
+
+- At the 85th percentile (0.85), 2,483 outliers were detected.
+- At the 88th percentile (0.88), 1,987 outliers were detected.
+- At the 90th percentile (0.90), 1,656 outliers were detected.
+- At the 92nd percentile (0.92), 1,325 outliers were detected.
+- At the 95th percentile (0.95), 828 outliers were detected.
+- At the 98th percentile (0.98), 332 outliers were detected.
+= At the 99th percentile (0.99), 166 outliers were detected.
+-At the 99.5th percentile (0.995), 83 outliers were detected.
+
+This shows that the number of identified outliers decreases as the threshold becomes stricter, with only 83 data points being flagged as outliers at the 99.5% threshold.
+
+By examining the outliers at various thresholds, we can decide how to handle them in the model, either by removing, transforming, or keeping them, depending on their impact on the analysis.
+
+
+
+```{r}
+# Extract residuals
+residuals <- residuals(mod_gam)
+
+# Identify the largest positive and negative residuals
+outliers <- which(abs(residuals) > quantile(abs(residuals), 0.85)) # Top 15% residuals
+data_outliers <- delay_normalized_log[outliers, ]
+
+# View these outliers
+#print(data_outliers)
+
+# Load writexl library
+library(writexl)
+
+# Save the influential data points to an Excel file
+write_xlsx(data_outliers, path = "data_outliers.xlsx")
+```
+
+
+I decided to check the top 15% of residuals to find the extreme values that could be affecting the model. I selected the residuals that were higher than the 85th percentile (the largest 15% of residuals). Then, I saved these outliers in a new dataset and exported them to an Excel file for further review. This way, I can examine the outliers and decide if they should be removed or handled differently in the analysis.
+
+
+```{r}
+table(data_outliers$season)
+```
+
+
+The table shows the distribution of outliers across different seasons:
+
+- **Autumn**: 553 outliers
+- **Spring**: 577 outliers
+- **Summer**: 792 outliers
+- **Winter**: 561 outliers
+
+It appears that Summer has the highest number of outliers, which may suggest that delays in the summer are more extreme compared to other seasons. This could be due to various factors like higher traffic or weather conditions, which lead to more significant delays. The relatively similar number of outliers in Autumn, Winter, and Spring indicates that the other seasons have less extreme delays on average. Investigating the reasons behind the higher outliers in Summer could provide useful insights for improving the model or understanding seasonal variations in flight delays.
+
+
+```{r}
+table(data_outliers$carrier)
+table(data_outliers$airport)
+
+```
+
+The tables you provided show the distribution of outliers by carrier and airport.
+
+**1- By Carrier**:
+
+- The table lists the number of outliers for each airline. WN (Southwest Airlines) has the highest number of outliers (397), followed by NK (Spirit Airlines) with 341 outliers, and OO (SkyWest Airlines) with 323 outliers. Other carriers, such as B6 (JetBlue), AA (American Airlines), and DL (Delta), also show significant numbers of outliers (209, 195, and 195, respectively). These airlines have higher flight volumes, which may explain the higher number of extreme delays (outliers).
+
+**2- By Airport**:
+
+- This table shows the number of outliers by airport code. For example, MCO (Orlando International Airport) has 90 outliers, and LAX (Los Angeles International Airport) has 41 outliers. Some airports, like ABE (Lehigh Valley International) and ACK (Nantucket Memorial), have only a few outliers (1 or 2), likely because of lower flight volumes or more predictable operations.
+These insights suggest that larger, busier airports and airlines tend to have more extreme delays (outliers), possibly due to higher traffic or other operational challenges. Exploring why these specific carriers and airports have more outliers could help identify patterns or issues influencing delays.
+
+```{r}
+table(data_outliers$month)
+table(data_outliers$year)
+```
+
+
+The tables display the distribution of outliers by month and year.
+
+**1- By Month**:
+
+- The number of outliers is relatively consistent throughout the year, with the highest counts observed in July and August (281 outliers each). This suggests that delays tend to be more extreme during the summer months, possibly due to higher traffic and weather-related disruptions commonly experienced during this time.
+
+
+**2- By Year**:
+
+- The distribution of outliers shows that 2021 has the highest number of outliers (560). This indicates that the effects of external factors, such as operational challenges, may have continued to influence delays in 2021. Despite the exclusion of 2020 from the analysis, 2021 stands out as a year with a significant number of extreme delays, which could be linked to ongoing industry adjustments and recovery processes.
+Overall, the data suggests that both summer months and 2021 experienced more extreme delays, highlighting the potential impact of seasonal and operational factors on flight performance.
+
+```{r}
+# Count outliers by year and month from data_outliers
+outlier_time_trend <- data_outliers %>%
+  group_by(year, month) %>%
+  summarise(outlier_count = n())
+
+# Sort the outlier counts by descending order
+outlier_time_trend_sorted <- outlier_time_trend %>%
+  arrange(desc(outlier_count))
+
+# Display the sorted data
+cat("The outlier counts sorted by month and year:\n")
+
+# Display the sorted data
+cat("The outlier counts sorted by month and year:\n")
+print(outlier_time_trend_sorted)
+
+# Print the month and year with the highest number of outliers
+top_outlier <- outlier_time_trend_sorted[1, ]
+cat("\nThe highest number of outliers occurred in:\n")
+print(top_outlier)
+
+
+```
+
+
+It’s clear that 2021 has a high number of outliers, particularly in July and June, with counts of 80 and 79 outliers, respectively. This stands out compared to other years, especially when looking at years like 2023 or 2013, where the outlier counts are lower. The persistently high outlier counts in 2021 suggest that this year might still have been impacted by external factors, potentially linked to ongoing disruptions, possibly from the pandemic or operational challenges that persisted into 2021.
+
+
+# Outlier Analysis in Flight Delay Data
+
+```{r}
+# Add a flag to differentiate outliers from non-outliers
+delay_normalized_log$outlier_flag <- ifelse(rownames(delay_normalized_log) %in% rownames(data_outliers), "Outlier", "Non-Outlier")
+
+# Summary statistics for predictors (grouped by outlier_flag)
+library(dplyr)
+summary_table <- delay_normalized_log %>%
+  group_by(outlier_flag) %>%
+  summarise(
+    avg_weather_ratio = mean(log_weather_ratio, na.rm = TRUE),
+    avg_carrier_ratio = mean(log_carrier_ratio, na.rm = TRUE),
+    avg_nas_ratio = mean(log_nas_ratio, na.rm = TRUE),
+    avg_security_ratio = mean(log_security_ratio, na.rm = TRUE),
+    avg_late_aircraft_ratio = mean(log_late_aircraft_ratio, na.rm = TRUE)
+  )
+print(summary_table)
+
+```
+
+I flagged the top **15%** of extreme residuals as outliers and compared them to the non-outliers to understand why there are so many. Here’s what I found:
+
+**Differences Between Outliers and Non-Outliers**:
+
+- Outliers tend to have higher carrier and NAS ratios, suggesting that flights with more traffic or airline issues may experience bigger delays.
+
+- Outliers also have slightly lower weather and security ratios, which implies that weather and security issues might not be the main causes of extreme delays.
+
+- Late aircraft ratio is higher in outliers, indicating that delayed flights may have experienced more late arrivals, leading to further delays.
+
+
+
+To compare the results of the **GAM model with and without the outliers**, I first created two models: one with only outliers and one with the data excluding the outliers. By doing this, I can analyze how the outliers influence the model performance and the relationships between the predictors and the delay ratio.
+
+
+**Model with Outliers**
+
+First, I built the GAM model with outliers included. The model was trained using the data_outliers dataset, which contains only the outliers based on the defined threshold (top 15% of residuals). Here is the summary of the model:
+
+
+```{r}
+library(mgcv)
+
+# Rebuild the GAM model with outliers
+
+mod_gam_outlier <- gam(delay_ratio ~ s(log_late_aircraft_ratio) + s(log_carrier_ratio) + 
+                 s(log_nas_ratio) +  s(log_weather_ratio) + s(log_security_ratio) 
+                   + season,data = data_outliers)
+
+# Summary of the new model
+summary(mod_gam_outlier)
+```
+
+This model shows the relationships between the variables and the delay ratio when only the outliers are considered. It demonstrates that factors like log_late_aircraft_ratio, log_carrier_ratio, and log_nas_ratio significantly affect the delay ratio. The model also indicates how different seasons influence delays, with winter showing a stronger effect compared to other seasons.
+
+
+**Model without Outliers**
+
+Next, I built a GAM model without outliers. To do this, I filtered out the outliers from the original dataset and trained a new model using the cleaned data. The following code removes the outliers and then fits the model:
+
+```{r}
+# Filter to exclude outliers
+data_no_outliers <- delay_normalized_log %>%
+  filter(!(rownames(delay_normalized_log) %in% rownames(data_outliers)))
+
+# Check the size of the dataset
+dim(data_no_outliers)
+
+```
+
+After filtering out the outliers, the dataset size becomes smaller, as expected. Here's the model built on the cleaned data:
+
+
+This model shows a slightly improved fit as indicated by a higher adjusted R-squared value (0.989 compared to 0.943 for the model with outliers). It also shows similar relationships between predictors and delay ratio, but the effect of season and certain variables may slightly differ when compared to the model with outliers.
+
+```{r}
+library(mgcv)
+
+# Rebuild the GAM model without outliers
+
+mod_gam_clean <- gam(delay_ratio ~ s(log_late_aircraft_ratio) + s(log_carrier_ratio) + 
+                 s(log_nas_ratio) +  s(log_weather_ratio) + s(log_security_ratio) 
+                   + season,data = data_no_outliers)
+
+# Summary of the new model
+summary(mod_gam_clean)
+
+```
+
+By comparing the models with and without outliers, I can evaluate how outliers impact the predictive power of the model. The model without outliers shows a better fit, with a lower GCV (0.0012273), indicating a more generalizable model that avoids overfitting and better captures the relationships between predictors and the delay ratio. This suggests that extreme values in the dataset may have a distorting effect on the model, causing unnecessary complexity and affecting the smoothness of the relationship between variables.
+
+However, the model with outliers, despite its higher GCV (0.023599), still provides valuable insights into the behavior of extreme delays. It helps in understanding how outliers influence flight delay predictions and their potential impact on the airline industry. In conclusion, while excluding outliers improves the model’s generalization, keeping outliers can be useful for examining the effects of extreme delays on the overall system.
+
+
+
+
+```{r}
+par(mfrow = c(1, 2))
+
+# Plot QQ plot for residuals of the first model before extracting 15% outliers (mod_gam)
+qqPlot(residuals(mod_gam), main = "QQ Plot for mod_gam")
+
+
+# Plot QQ plot for residuals of the second model after extracting outliers (mod_gam_clean)
+qqPlot(residuals(mod_gam_clean), main = "QQ Plot for mod_gam_clean")
+
+```
+
+
+
+- **Left plot (with outliers)**: The QQ plot for the model with outliers shows more significant deviations from the blue line, particularly at the extremes. This indicates that the residuals deviate more from the normal distribution due to the presence of outliers. Outliers can increase the variance of the residuals, leading to a less normal distribution.
+
+- **Right plot (without outliers)**: After excluding outliers, the QQ plot on the right demonstrates that the residuals more closely follow the normal distribution. The line fits much better, and the deviations at the extremes are smaller, indicating a better-fitting model with smoother residuals. This suggests that excluding outliers helps in achieving a better model fit and a more stable relationship between the predictors and the target variable.
+
+
+
+
+Now, we aim to assess the performance of the **Generalized Additive Model (GAM)** by evaluating its predictive accuracy through **cross-validation** and using **Root Mean Squared Error (RMSE)** as the evaluation metric. By running this code, we will train the model on subsets of the data (training set) and evaluate its performance on separate unseen data (test set) to understand how well it generalizes. This will allow us to compare the model's behavior when trained on the full dataset and when outliers are excluded, offering valuable insights into the effect of outliers on model performance.
+
+### Cross-Validation and RMSE
+
+To ensure the model's performance is robust and not overly influenced by the specific data split, we will perform **k-fold cross-validation**. In this method, the dataset is divided into **k** equal-sized folds, and the model is trained on **k-1** folds while being tested on the remaining fold. This process is repeated **k** times, each time using a different fold as the test set and the remaining data for training. The results from all folds are then averaged to provide a more reliable estimate of model performance. Cross-validation helps mitigate overfitting and provides a clearer picture of how the model might perform on new, unseen data.
+
+The **Root Mean Squared Error (RMSE)** will be used to evaluate the model's predictive accuracy. RMSE measures the average magnitude of the model's prediction errors and gives a clear indication of how close the model’s predictions are to the actual values. The formula for RMSE is:
+
+\[
+RMSE = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}
+\]
+
+Where:
+
+- \( y_i \) is the actual value for observation \( i \),
+- \( \hat{y}_i \) is the predicted value for observation \( i \),
+- \( n \) is the total number of observations.
+
+Lower RMSE values signify better model performance, indicating that the model's predictions are closer to the actual values.
+
+### Training and Testing
+
+The training process involves fitting the model to the data, learning the relationships between the input features and the target variable. The model is then tested on data it has never seen during training, allowing us to gauge how well it performs on unseen data. By comparing the results of the model trained on the entire dataset and the one trained on data without outliers, we can assess whether excluding outliers leads to improved model accuracy.
+
+
+
+```{r}
+library(mgcv)
+
+# Set up k-fold cross-validation
+set.seed(123)  # For reproducibility
+k <- 5  # Number of folds
+folds <- cut(seq(1, nrow(data_no_outliers)), breaks = k, labels = FALSE)
+
+# Initialize a vector to store RMSE values for each fold
+rmse_values <- numeric(k)
+
+# Perform cross-validation
+for (i in 1:k) {
+  # Split data into training and test sets
+  test_indices <- which(folds == i)
+  test_data <- data_no_outliers[test_indices, ]
+  train_data <- data_no_outliers[-test_indices, ]
+  
+  # Fit the GAM model on the training set
+  mod_gam_cv <- gam(delay_ratio ~ s(log_late_aircraft_ratio) + s(log_carrier_ratio) + 
+                 s(log_nas_ratio) +  s(log_weather_ratio) + s(log_security_ratio) 
+                   + season, data = train_data)
+  
+  # Predict on the test set
+  predictions <- predict(mod_gam_cv, newdata = test_data)
+  
+  # Calculate the Root Mean Squared Error (RMSE) for this fold
+  rmse_values[i] <- sqrt(mean((test_data$delay_ratio - predictions)^2))
+}
+
+# Calculate the average RMSE across all folds
+avg_rmse <- mean(rmse_values)
+print(avg_rmse)
+
+```
+
+
+
+
+```{r}
+# Residuals from the cross-validated model
+residuals_cv <- test_data$delay_ratio - predictions
+
+# Residuals vs Index
+plot(residuals_cv, main = "Residuals vs Index", xlab = "Index", ylab = "Residuals", pch = 19, col = "blue")
+
+
+```
+
+
+# Conclusion
+
+The Residuals vs Index plot was used to evaluate the performance of the model by visualizing the differences between the observed and predicted values (residuals). In this plot, the residuals are randomly scattered around zero, indicating that there are no apparent patterns in the errors. This is a positive result, as it suggests that the model is well-fitted and has captured the underlying relationships in the data without missing any important patterns.
+
+The random spread of residuals means that the model's predictions are not consistently off in one direction, and there are no obvious outliers or trends that would suggest model misspecification. The absence of any clear pattern indicates that the model is appropriately capturing the variability in the data and is performing reliably.
+
+Overall, the model’s ability to predict the test data is satisfactory, and the residuals’ behavior suggests that the model does not require any immediate adjustments. This confirms that the model is robust and provides reliable predictions for the given dataset.
+
+
+
+
+
+
+
+
+
+
+
+
+
