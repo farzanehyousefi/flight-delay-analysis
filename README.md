@@ -22,7 +22,7 @@ An R-based exploration of U.S. flight delays using Generalized Additive Models (
 
 
 
-2.**Install dependencies in R**
+2. **Install dependencies in R**
 
 install.packages(c(
   "mgcv", "ggplot2", "dplyr", "tidyr",
@@ -31,16 +31,16 @@ install.packages(c(
 ))
 
 
-3.**Render the report**
+3. **Render the report**
 
 rmarkdown::render(
   "code/flight_delay_analysis.Rmd",
   output_file = "docs/flight_delay_analysis.html"
 )
 
-4.**Open the report**
+4. **View it online**  
+   [flight_delay_analysis.html](https://farzanehyousefi.github.io/flight-delay-analysis/flight_delay_analysis.html)
 
-Open docs/flight_delay_analysis.html in your browser.
 
 
 ## 📊 Dataset
