@@ -43,11 +43,11 @@ rmarkdown::render(
 Open docs/flight_delay_analysis.html in your browser.
 
 
-**Dataset**
+## 📊 Dataset
 We use the Flight Delay Data for U.S. Airports by Carrier (Aug 2013 – Aug 2023), originally published on Kaggle:
 https://www.kaggle.com/datasets/eugeniyosetrov/flights-data?resource=download
 
 
-**Author**
+## 👤 Author
 Farzaneh Yousefi
 
